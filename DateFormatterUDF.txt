@@ -1,0 +1,97 @@
+package com.xxx.udf;
+
+import org.apache.hadoop.hive.ql.exec.Description;
+import org.apache.hadoop.hive.ql.exec.UDF;
+import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
+import org.apache.log4j.Logger;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.HashSet;
+
+@Description(
+             name = "DateFormatterMiddleEndianToISOUDF",
+             value = "_FUNC_(str) - Formats date from mm/dd/yyyy to yyyy-mm-dd",
+             extended = "Example:\n" + " > SELECT date_format(visit_date) from scan s;\n" + " 2016-08-13")
+public class DateFormatterMiddleEndianToISOUDF extends UDF {
+    static Logger log = Logger.getLogger(DateFormatterMiddleEndianToISOUDF.class.getName());
+
+    private static final Set<String> MONTHS_WITH_30 = new HashSet<String>(Arrays.asList("04", "06", "09", "11"));
+
+    /**
+     * @param input date in mm/dd/yyyy (String)
+     * @return modified string with date formatted into yyyy-mm-dd (String)
+     * @throws UDFArgumentException
+     */
+    public String evaluate(String inputDate) throws UDFArgumentException {
+        String inputDateFormatted = null;
+        String inputDateSeperator = "/";
+        String outputDateSeperator = "-";
+
+        if (inputDate != null && inputDate.length() == 10 && inputDate.contains(inputDateSeperator)) {
+            // Split date into an array inputDateArray {"mm","dd","yyyy"} based on the inputDateSeperator
+            String[] inputDateArray = inputDate.split(inputDateSeperator);
+
+            // To check whether array inputDateArray has 3 member as expected in the format {"mm","dd","yyyy"}
+            if (inputDateArray.length == 3) {
+
+                // To check whether year, date and month has valid length of characters as expected
+                if (inputDateArray[0].length() != 2 || inputDateArray[1].length() != 2
+                        || inputDateArray[2].length() != 4) {
+                    log.error("Input date " + inputDate + " is not valid input format");
+                    throw new UDFArgumentException("Input date " + inputDate + " is not valid input format");
+                }
+
+                int year;
+                int month;
+                int day;
+
+                try {
+                    year = Integer.parseInt(inputDateArray[2]);
+                    month = Integer.parseInt(inputDateArray[0]);
+                    day = Integer.parseInt(inputDateArray[1]);
+                } catch (NumberFormatException ex) {
+                    log.error("Input date " + inputDate + " is invalid : " + ex.getMessage());
+                    throw new UDFArgumentException("Input date " + inputDate + " is invalid : " + ex.getMessage());
+                }
+
+                // To check whether month, day and year are within the valid date boundary
+                if ((month < 1 || month > 12) || (day < 1 || day > 31) || (year < 1900 || year > 2999)) {
+                    log.error("Input date " + inputDate + " is not within valid date range");
+                    throw new UDFArgumentException("Input date " + inputDate + " is not within valid date range");
+                }
+
+                // To check whether input day is valid day of the given month
+                if (MONTHS_WITH_30.contains(inputDateArray[0]) && day > 30) {
+                    log.error("Input date " + inputDate + " doesn't has valid day for the given month ");
+                    throw new UDFArgumentException("Days not valid for given month");
+                } else if (month == 2) {
+                    if ((year % 400 == 0) || ((year % 4 == 0) && (year % 100 != 0))) {
+                        if (day > 29) {
+                            log.error("Input date " + inputDate + " doesn't has valid day for the given month ");
+                            throw new UDFArgumentException("Input date " + inputDate
+                                    + " doesn't has valid day for the given month ");
+                        }
+                    } else if (day > 28) {
+                        log.error("Input date " + inputDate + " doesn't has valid day for the given month ");
+                        throw new UDFArgumentException("Input date " + inputDate
+                                + " doesn't has valid day for the given month ");
+                    }
+                }
+
+                // Prepare the output date pattern as yyyy-mm-dd
+                inputDateFormatted = inputDateArray[2] + outputDateSeperator + inputDateArray[0] + outputDateSeperator
+                        + inputDateArray[1];
+
+            } else {
+                log.error("Input date " + inputDate + " is not as expected date pattern, it should be mm/dd/yyyy");
+                throw new UDFArgumentException("Input date " + inputDate
+                        + " is not as expected date pattern, it should be mm/dd/yyyy");
+            }
+
+        } else {
+            log.error("Input date " + inputDate + " is empty/null or not in a valid format");
+            throw new UDFArgumentException("Input date " + inputDate + " is empty/null or not in a valid format");
+        }
+        return inputDateFormatted;
+    }
+}
